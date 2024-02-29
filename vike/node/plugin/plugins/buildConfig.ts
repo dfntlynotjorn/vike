@@ -15,10 +15,10 @@ import {
   assertUsage,
   injectRollupInputs,
   normalizeRollupInput,
-  assertNodeEnvIsNotDev,
   getOutDirs,
   type OutDirs,
-  isNpmPackageImport
+  isNpmPackageImport,
+  assertNodeEnv_build
 } from '../utils.js'
 import { getVikeConfig, isV1Design } from './importUserCode/v1-design/getVikeConfig.js'
 import { getConfigValue } from '../../../shared/page-configs/helpers.js'
@@ -45,14 +45,16 @@ function buildConfig(): Plugin {
   let isServerAssetsFixEnabled: boolean
   let isSsrBuild: boolean
   let outDirs: OutDirs
+  let config: ResolvedConfig
   return {
     name: 'vike:buildConfig',
     apply: 'build',
     enforce: 'post',
     configResolved: {
       order: 'post',
-      async handler(config) {
-        assertNodeEnv()
+      async handler(config_) {
+        config = config_
+        assertNodeEnv_build()
         assertRollupInput(config)
         const entries = await getEntries(config)
         assert(Object.keys(entries).length > 0)
@@ -71,7 +73,7 @@ function buildConfig(): Plugin {
       }
     },
     config(config) {
-      assertNodeEnv()
+      assertNodeEnv_build()
       isSsrBuild = viteIsSSR(config)
       return {
         build: {
@@ -82,7 +84,7 @@ function buildConfig(): Plugin {
       } satisfies UserConfig
     },
     buildStart() {
-      assertNodeEnv()
+      assertNodeEnv_build()
     },
     writeBundle: {
       order: 'post',
@@ -98,7 +100,7 @@ function buildConfig(): Plugin {
           if (!isServerAssetsFixEnabled) {
             await fs.copyFile(clientManifestFilePath, assetsJsonFilePath)
           } else {
-            const clientManifestMod = await fixServerAssets(outDirs)
+            const clientManifestMod = await fixServerAssets(config)
             await fs.writeFile(assetsJsonFilePath, JSON.stringify(clientManifestMod, null, 2), 'utf-8')
           }
           await fs.rm(clientManifestFilePath)
@@ -283,8 +285,4 @@ function assertRollupInput(config: ResolvedConfig): void {
     htmlInput === undefined,
     `The entry ${htmlInput} of config build.rollupOptions.input is an HTML entry which is forbidden when using Vike, instead follow https://vike.dev/add`
   )
-}
-
-function assertNodeEnv() {
-  assertNodeEnvIsNotDev('building')
 }
